@@ -1,0 +1,234 @@
+---
+title: "Final_Project"
+rmarkdown::html_document:
+  theme: yeti
+  toc_depth: 2
+  toc_float: yes
+  toc: yes
+  code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+ Exploring  of Soil Test Data for the Fiscle year, 2015
+
+Soil testing provides useful information to help people manage their land. A farmer or home gardener might have his/her soil tested to determine how much lime or fertilizer is needed to grow plants and/or avoid over-applying nutrient sources like manure. Parents might test the soil in their yard to see if hazardous amounts of lead or arsenic are present before installing a backyard playset for their children, or before beginning a new vegetable garden. Archeologists use soil testing to learn about past land use at historical sites. Scientists test soil to monitor the effects of new management practices on soil properties and environmental conditions.
+The data used  for  exploratory analysis belongs to soil testing lab,  University of Delaware.
+
+Guiding Questions
+1. what is the State wide trend of all commercial and homeowner&landscape soil           samples submitted in the Fiscle year 2015? 
+2.  what is distribution of   samples  tested among major crop.
+3.  Variation in soil PH and nutrients  among different Delaware  
+     counties?
+4.  What is the  soil pH and nutrient trends in different land use classes.
+      
+```{r}
+if(! require("pacman")) install.packages("pacman")
+pacman::p_load(
+  tidyverse,
+  here
+)
+```
+  
+```{r}
+ 
+library(readxl)
+library(tidyverse)
+library(here)
+```
+  
+```{r}
+soil_test_rawdata <- read_excel(here::here("Data", "soil_test_rawdata.xlsx"))
+```
+Data cleaning: 
+```{r}
+soil_test_data<-
+  soil_test_rawdata %>% 
+  mutate(type = case_when(
+    str_detect(string = type, pattern = "^[L]") ~ "Lawn_Garden",
+    str_detect(string = type, pattern = "^[C]") ~ "Commercial_crop",
+    str_detect(string = type, pattern = "^[P]") ~ "Professional_Landscaper")) %>% 
+  select(-"Lab No.",-"FY" , -"zip1" , -"Crop2" ,-"Crop3", -"AEbufph") %>% 
+  rename("Land_uses" = type,
+          "Major_crops" = crop1,
+          "Soil_pH" = ph,
+          "Organic_matter" = om,
+          "P_mgkg" = M3Pmgkg,
+          "K_mgkg" = M3Kmgkg,
+          "Ca_mgkg" = M3Camgkg,
+          "Mg_mgkg" = M3Mgmgkg,
+          "Mn_mgkg" = M3Mnmgkg,
+          "Zn_mgkg" = M3Znmgkg,
+          "Cu_mgkg" = M3Cumgkg,
+          "Fe_mgkg" = M3Femgkg,
+          "B_mgkg" = M3Bmgkg,
+          "Na_mgkg" = M3Namgkg,
+          "S_mgkg" = M3Smgkg,
+          "Al_mgkg" =  M3Almgkg,
+          "Pb_mgkg" = etotpbmgkg) %>% 
+      arrange(County)
+```
+
+```{r}
+soil_test_data<-
+  soil_test_data %>% 
+  rename(Date_received = Received_Date) %>%  
+  mutate(across(starts_with("Date"), ~ lubridate::mdy(.), .names = "{col}"))
+```
+  
+```{r}
+soil_test_data<-
+  soil_test_data %>% 
+mutate(Soil_pH = if_else(is.na(Soil_pH), median(Soil_pH, na.rm = T), Soil_pH)) %>% 
+  mutate(P_mgkg = if_else(is.na(P_mgkg), median(P_mgkg, na.rm = T), P_mgkg)) %>%
+mutate(Pb_mgkg = if_else(is.na(Pb_mgkg), median(Pb_mgkg, na.rm = T), Pb_mgkg)) %>% 
+mutate(Cu_mgkg = if_else(is.na(Cu_mgkg), median(Cu_mgkg, na.rm = T), Cu_mgkg))
+```
+
+```{r}
+soil_test_data %>% 
+summarize(across(everything(), ~ sum(is.na(.))))
+```
+Data Exploration:
+Statewide trend  of soil samples received for  Testing : In the dataset there are samples are categorized in to  lawn& garden, commercial crops and professional landscaper.
+
+```{r}
+sample_over_time<-
+  soil_test_data %>%
+  group_by(County, Land_uses, Date_received) %>% 
+  count() %>% 
+  arrange(Land_uses) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = Date_received,
+             y = n, 
+             color = Land_uses))+
+  geom_point() +
+  facet_wrap(~ County)+
+  labs(x = "Date",
+       y = " No. of Samples",
+       title = "Distribution of soil samples over time for testing")+
+  coord_cartesian(ylim = c(0,100))+
+  theme_bw()+
+  theme(plot.title = element_text(face = "bold"))
+
+
+```
+ 
+```{r}
+soil_test_data %>% 
+group_by(Land_uses, County) %>% 
+  ggplot (aes(x = County,
+           fill = Land_uses))+ 
+geom_bar(position = "dodge")
+
+```
+Major crops  distribution of  by county
+```{r}
+ soil_test_data %>% 
+  group_by( Major_crops,County) %>%  
+  count(Land_uses) %>% 
+ ggplot(aes(x = County,
+           y = n,
+           color = Major_crops)) +
+  geom_point()
+```
+Major crop : Highest number of soil samples tested  are from  BFM (Bluegrass/Fescue/Ryegrass lawn).
+```{r}
+crop_distribution<-
+  soil_test_data %>% 
+group_by(Major_crops) %>%
+  count(sort= TRUE) %>% 
+  head(20) %>% 
+   ggplot()+
+  geom_col(aes(x=reorder(Major_crops,n),y=n),fill= 'turquoise')+
+    coord_flip()+
+  labs(
+    title = 'Crop Type Distribution',
+    x = 'Crop Type',
+    y = 'Count'
+  )
+```
+Median  values for  tested parameters of soil by county and land_use pattern. 
+```{r}
+soil_test_data %>%
+  group_by(County, Land_uses) %>%
+  summarize(across(c(where(is.double), -Date_received), ~median(.))) %>% 
+  ungroup() %>% 
+arrange(Land_uses)
+```
+Exploration of soil pH:   Most of tested samples belongs to very low soil pH and acid loving plants perform best these soils
+```{r}
+pH_classes <- soil_test_data %>% 
+  mutate(Soil_pH = case_when(
+    Soil_pH <= 5.4 ~ "Very low",
+    Soil_pH = 5.5 & Soil_pH <= 5.9 ~ "Low",
+    Soil_pH = 6.0 & Soil_pH <= 6.4 ~ "Medium",
+    Soil_pH = 6.5 & Soil_pH <= 6.9 ~ "High",
+    Soil_pH >= 7.0 ~ "Very High"))%>% 
+      group_by(Soil_pH) %>%
+  count(sort= TRUE) %>% 
+     ggplot()+
+  geom_col(aes(x=reorder(Soil_pH,n),y=n),fill= 'orange')+
+    coord_flip()+
+  labs(
+    title = 'Sample distribution in different pH classes',
+    x = 'Soil pH classes',
+    y = ' Count'
+  ) 
+```
+pH variation among different land uses: PH of lawn and garden samples are usually higher as compare to commercial and profession landscapers.  
+```{r}
+PH<-
+  soil_test_data %>%  
+    ggplot(aes(x = Soil_pH)) +
+  geom_histogram()+
+facet_wrap(~ Land_uses)+
+ylab("No. of samples") +
+  theme_bw() +
+  theme(legend.position="none",
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        strip.text = element_text(size=10, face="bold"))
+
+```
+Density plots to see the distribution of  pH  and organic matter in counties    
+```{r}
+ PH_density<-
+   soil_test_data %>% 
+  ggplot( aes(Soil_pH, fill= County)) +
+  geom_density(alpha = .5) +
+  ggtitle(" Soil pH")
+
+```
+Density plots to see the distribution of soil pH in counties .
+```{r}
+OM <-
+  soil_test_data %>% 
+  ggplot( aes(Organic_matter, fill=County)) +
+  geom_density(alpha = .5) +
+  ggtitle(" Organic matter")
+
+```
+Relationship between pH and available soil macronurients for crops. 
+```{r}
+soil_nut <-
+  soil_test_data %>% 
+ggplot(aes(x = Soil_pH)) +
+  geom_point(aes(y=Ca_mgkg), shape=21, fill="red", color="black", size=2, stroke=.5) +
+  geom_point(aes(y=Mg_mgkg), shape=21, fill="blue", color="black", size=2, stroke=.5) +
+  geom_point(aes(y=K_mgkg), shape=21, fill="gray", color="black", size=2, stroke=.5)+
+  geom_point(aes(y=P_mgkg), shape=21, fill="green", color="black", size=2, stroke=.5)+
+   ylab("mg /kg soil") +
+  theme_bw() +
+  theme(legend.position="none",
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=16),
+        strip.text = element_text(size=16, face="bold"))
+```
+-  Highest number of samples tested are from lawn and garden in all the     
+   counties. More lawn and garden sample as compare to commercial crop   
+   depicts the increase in urbanization and decrease in farming land in the State.
+-  Soil pH categories are very helpful to decide the type of crop grown. 
+-  Sussex county samples have high phosphorus content in all land use classes.
+-  Soil ph directly affect the availability of soil nutrients to the crop.
